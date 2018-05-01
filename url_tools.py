@@ -1,16 +1,13 @@
 # coding: utf-8
-
-import urllib
-import urllib2
+import os
 import json
+import time
+
 from lxml import etree
 import requests
 
-import urllib2
-from bs4 import BeautifulSoup
 
-
-class Splider:
+class Spider:
 
     def __init__(self):
         self.manager = Manager()
@@ -23,12 +20,10 @@ class Splider:
         while self.manager.has_new_url():
             try:
                 current_url = self.manager.get_new_url()
-                html_content = self.downloader.download(current_url)
-                # new_url, data = self.parser.parse(root_url, html_content)
-                # self.manager.add_new_url(new_url)
-                # self.outputer.collect(data)
-                self.outputer.output(html_content)
-            except urllib2.URLError, e:
+                json_content = self.downloader.download(current_url)
+                list = self.parser.parse(json_content)
+                self.outputer.write_to_file(os.getcwd(), "gifs.txt", list, "a")
+            except requests.ConnectionError as e:
                 if hasattr(e, "reason"):
                     print "craw faild, reason: " + e.reason
 
@@ -64,11 +59,9 @@ class Download(object):
         }
         content = ""
         try:
-            # request = urllib2.Request(url, headers=headers)
-            # response = urllib2.urlopen(request)
             response = requests.get(url, headers=header)
             content = response.text
-        except urllib2.URLError, e:
+        except requests.ConnectionError as e:
             if hasattr(e, "reason") and hasattr(e, "code"):
                 print e.code
                 print e.reason
@@ -97,13 +90,11 @@ class Parse(object):
         new_url = root_url + "?data_category_id=" + data_category_id + "&max_id=" + str(max_id)
         return new_url
 
-    def parse(self, root_url, content):
-        soup = BeautifulSoup(content, "html.parser", from_encoding="utf-8")
-        div = soup.find(id="list-container")
-        ul = div.find("ul", {"class": "note-list"})
-        new_url = self.get_new_url(root_url, ul)
-        new_data = self.get_new_data(root_url, ul)
-        return new_url, new_data
+    def parse(self, content):
+        list = []
+        dict_1 = json.loads(content)
+        list = dict_1["data"]
+        return list
 
 
 class Output(object):
@@ -122,8 +113,44 @@ class Output(object):
     def output(self, data):
         print data
 
+    def write_to_file(self, path, file_name, content, mode='a'):
+        if not os.path.isdir(path):
+            os.makedirs(path)
+        file_path = os.path.join(path, file_name)
+        f = open(file_path, mode)
+        idir = "gifsDir"
+        ipath = str(path) + "\\" + str(idir)
+        if not os.path.isdir(ipath):
+            os.makedirs(ipath)
+
+
+        for link in content:
+            f.write(link["url"].encode("utf-8"))
+            f.write("\n")
+            self.dowload_gif_image(ipath, str(link["id"]) + ".gif", str(link["url"]))
+        f.close()
+
+    def dowload_gif_image(self, path, file_name, gifs_url):
+        header = {
+            "api_key": "4UEYojhUA694ZJ8SDlNT504p8AuUaZf524erKaIFuL83",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        }
+        path = path + "\\" + str(file_name)
+        data = requests.get(gifs_url, headers=header)
+        fil = file(path, "wb")
+        fil.write(data.content)
+        fil.close()
+
+
+def main(max, limit, lang, type):
+    spider = Spider()
+    offset = 0
+    while offset < max:
+        root_url = "https://api.gifskey.com/v1/gifs/search?q={}&fmt=json&limit={}&lang={}&offset={}&rating=".format(str(type), int(limit),
+                                                                                                                    str(lang), int(offset))
+        spider.craw_search_word(root_url)
+        offset += 20
+
 
 if __name__ == "__main__":
-    root_url = "https://api.gifskey.com/v1/gifs/trending?fmt=json&limit=20&lang=hindi&offset=40&rating="
-    splider = Splider()
-    splider.craw_search_word(root_url)
+    main(20, 20, "hindi", "crying")
